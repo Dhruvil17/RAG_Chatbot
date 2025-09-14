@@ -1,0 +1,60 @@
+.input-area {
+    width: 100%;
+}
+
+.input-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    transition: border-color 0.2s ease;
+}
+
+.input-container:focus-within {
+    border-color: #007bff;
+}
+
+.message-input {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #333;
+    font-family: inherit;
+}
+
+.message-input::placeholder {
+    color: #999;
+}
+
+.send-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.send-button:hover {
+    background: #0056b3;
+}
+
+.send-button:active {
+    background: #004085;
+}
+
+.send-button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
