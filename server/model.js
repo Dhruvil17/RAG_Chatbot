@@ -1,12 +1,17 @@
 require("dotenv").config();
 const axios = require("axios");
 const { HfInference } = require("@huggingface/inference");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cheerio = require("cheerio");
 const { ChromaClient } = require("chromadb");
 const { v4: uuidv4 } = require("uuid");
 
 // Initialize Hugging Face
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY || "hf_dummy_key");
+const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // Initialize ChromaDB
 const chroma = new ChromaClient({
@@ -15,6 +20,35 @@ const chroma = new ChromaClient({
 
 const BATCH_SIZE = 10; // Smaller batch for news articles
 const newsCollectionName = "news_corpus";
+
+// Function to generate response using Gemini AI
+async function generateResponseWithGemini(question, context) {
+    try {
+        const prompt = `You are a helpful news assistant. Based on the following news context, answer the user's question in a clear, informative, and engaging way.
+
+        User Question: ${question}
+        News Context: ${context}
+
+        Instructions:
+        - Provide a comprehensive answer based on the news context
+        - If the context doesn't contain enough information, say so politely
+        - Keep the response conversational and easy to understand
+        - Focus on the most relevant and recent information
+        - Use proper formatting and structure
+
+        Answer:`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error generating response with Gemini:", error);
+        return `Based on the latest news, here's what I found:\n\n${context.substring(
+            0,
+            1000
+        )}${context.length > 1000 ? "..." : ""}`;
+    }
+}
 
 // Function to clean text content
 function cleanText(text) {
@@ -395,7 +429,7 @@ async function askQuestionAboutNews(question) {
 
         const results = await collection.query({
             queryEmbeddings: questionEmbedding,
-            nResults: 5, // Get more results for variety
+            nResults: 2, // Get more results for variety
             includeMetadata: true,
         });
 
@@ -416,11 +450,8 @@ async function askQuestionAboutNews(question) {
         const cleanContext = cleanText(rawContext);
         console.log("Context:", cleanContext);
 
-        // Format the response better
-        const answer = `Based on the latest news, here's what I found:\n\n${cleanContext.substring(
-            0,
-            1000
-        )}${cleanContext.length > 1000 ? "..." : ""}`;
+        // Generate response using Gemini AI
+        const answer = await generateResponseWithGemini(question, cleanContext);
 
         console.log("Question:", question);
         console.log("Answer:", answer);
