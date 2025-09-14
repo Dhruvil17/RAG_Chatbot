@@ -4,17 +4,20 @@ const cors = require("cors");
 const { collectNewsData, queryNewsContent } = require("./model");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
 
-// Health check
+app.post("/", (req, res) => {
+    console.log(`Server is up and running on PORT ${PORT}`);
+    res.json({ message: "POST request received!" });
+});
+
 app.get("/health", (req, res) => {
     res.json({ status: "OK" });
 });
 
-// Collect news
 app.post("/api/news/collect", async (req, res) => {
     try {
         const result = await collectNewsData();
@@ -24,7 +27,6 @@ app.post("/api/news/collect", async (req, res) => {
     }
 });
 
-// Chat
 app.post("/api/chat", async (req, res) => {
     try {
         const { question } = req.body;

@@ -2,9 +2,11 @@ services:
     chromadb:
         image: chromadb/chroma
         ports:
-            - "8000:8000"
+            - "0.0.0.0:8000:8000"
         environment:
             CHROMA_SERVER_CORS_ALLOW_ORIGINS: '["*"]'
+            CHROMA_SERVER_HOST: "0.0.0.0"
+            CHROMA_SERVER_HTTP_PORT: "8000"
         volumes:
             - chromadb_data:/chroma/chroma
 
