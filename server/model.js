@@ -34,13 +34,31 @@ function cleanText(text) {
         .trim();
 }
 
-// RSS feeds for news collection
+// RSS feeds for news collection - Reliable global news sources
 const RSS_FEEDS = [
-    "https://feeds.bbci.co.uk/news/rss.xml",
-    "https://rss.cnn.com/rss/edition.rss",
-    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-    "https://feeds.reuters.com/reuters/topNews",
-    "https://feeds.npr.org/1001/rss.xml",
+    // Major Global News Sources (Most Reliable)
+    "https://feeds.bbci.co.uk/news/rss.xml", // BBC News - Very Reliable
+    "https://rss.cnn.com/rss/edition.rss", // CNN International
+    "https://feeds.reuters.com/reuters/topNews", // Reuters - Global news
+    "https://feeds.npr.org/1001/rss.xml", // NPR News
+    "https://feeds.abcnews.com/abcnews/topstories", // ABC News
+    "https://feeds.cbsnews.com/CBSNewsMain", // CBS News
+    "https://feeds.nbcnews.com/nbcnews/public/news", // NBC News
+
+    // Tech News Sources (Reliable Tech)
+    "https://feeds.feedburner.com/techcrunch/startups", // TechCrunch
+    "https://feeds.feedburner.com/arstechnica/index/", // Ars Technica
+    "https://feeds.feedburner.com/venturebeat/SZYF", // VentureBeat
+
+    // Alternative Reliable Sources
+    "https://feeds.feedburner.com/theguardian/technology", // Guardian Tech
+    "https://feeds.feedburner.com/wired/index", // Wired Magazine
+    "https://feeds.feedburner.com/businessinsider", // Business Insider
+
+    // Fallback Sources (More Accessible)
+    "https://feeds.feedburner.com/ndtvnews-top-stories", // NDTV News
+    "https://feeds.feedburner.com/oreilly/radar", // O'Reilly Radar
+    "https://feeds.feedburner.com/forbes/innovation", // Forbes Innovation
 ];
 
 // Function to get embeddings from Hugging Face
@@ -222,8 +240,8 @@ async function collectAndStoreNews(collection) {
             const articles = await parseRSSFeed(feedUrl);
             console.log(`Found ${articles.length} articles`);
 
-            // Process first 10 articles from each feed
-            for (let j = 0; j < Math.min(10, articles.length); j++) {
+            // Process first 20 articles from each feed for more diverse data (aiming for 100+ chunks)
+            for (let j = 0; j < Math.min(20, articles.length); j++) {
                 const article = articles[j];
                 const content = await fetchArticleContent(article.link);
 
@@ -293,8 +311,8 @@ async function storeNewsInChromaDB(collection, articles) {
             // Create clean full text for storage
             const fullText = `${cleanTitle}\n\n${cleanDescription}\n\n${cleanContent}`;
 
-            // Split into chunks
-            const chunks = splitIntoChunks(fullText, 800, 80);
+            // Split into smaller chunks for better variety (aiming for 100+ total chunks)
+            const chunks = splitIntoChunks(fullText, 600, 60);
 
             for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
                 chunkId++;
@@ -358,16 +376,30 @@ async function askQuestionAboutNews(question) {
 
         const results = await collection.query({
             queryEmbeddings: questionEmbedding,
-            nResults: 5,
+            nResults: 5, // Get more results for variety
             includeMetadata: true,
         });
 
-        const context = results.documents[0].join(" ");
-        console.log("Context:", context);
+        // Randomize results to get different chunks each time
+        if (results.documents && results.documents.length > 0) {
+            const shuffledDocs = results.documents[0].sort(
+                () => Math.random() - 0.5
+            );
+            results.documents[0] = shuffledDocs;
+        }
+
+        if (!results.documents || results.documents.length === 0) {
+            return "I couldn't find any relevant news articles for your question. Please try asking about recent news topics.";
+        }
+
+        // Clean the context before using it
+        const rawContext = results.documents[0].join(" ");
+        const cleanContext = cleanText(rawContext);
+        console.log("Context:", cleanContext);
 
         // For now, return a simple response based on the context
         // You can integrate with Gemini API here later
-        const answer = `Based on the latest news, here's what I found:\n\n${context.substring(
+        const answer = `Based on the latest news, here's what I found:\n\n${cleanContext.substring(
             0,
             500
         )}...`;
