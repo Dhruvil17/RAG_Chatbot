@@ -3,6 +3,8 @@ import ChatBox from "./components/ChatBox";
 import InputArea from "./components/InputArea";
 import "./App.css";
 
+const API_BASE_URL = process.env.REACT_APP_BASE_URL;
+
 function App() {
     const [messages, setMessages] = useState([]);
     const [sessionID, setSessionID] = useState("");
@@ -12,17 +14,14 @@ function App() {
         setMessages((prev) => [...prev, userMessage]);
 
         try {
-            const response = await fetch(
-                "http://localhost:5050/api/send-message",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "session-id": sessionID || "",
-                    },
-                    body: JSON.stringify({ question }),
-                }
-            );
+            const response = await fetch(`${API_BASE_URL}/api/send-message`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "session-id": sessionID,
+                },
+                body: JSON.stringify({ question }),
+            });
 
             const data = await response.json();
 
