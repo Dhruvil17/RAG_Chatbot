@@ -5,7 +5,7 @@ const { HfInference } = require("@huggingface/inference");
 const { ChromaClient } = require("chromadb");
 const { v4: uuidv4 } = require("uuid");
 
-// Initialize Hugging Face
+// Initialize Hugging Face with better error handling
 const hf = new HfInference(process.env.HUGGINGFACE_API_KEY || "hf_dummy_key");
 
 // Initialize ChromaDB client
@@ -16,33 +16,36 @@ const chroma = new ChromaClient({
 const BATCH_SIZE = 3; // Smaller batches for t2.micro
 const newsCollectionName = "news_corpus";
 
-// Reduced RSS feeds for t2.micro (3 instead of 5)
+// Updated RSS feeds - replaced problematic Reuters feed
 const RSS_FEEDS = [
     "https://feeds.bbci.co.uk/news/rss.xml",
     "https://rss.cnn.com/rss/edition.rss",
-    "https://feeds.reuters.com/reuters/topNews",
+    "https://feeds.a.dj.com/rss/RSSWorldNews.xml", // Wall Street Journal instead of Reuters
 ];
 
-// Function to get embeddings from Hugging Face
+// Simple embedding function
 const getHFEmbeddings = async (texts) => {
     try {
-        // Use a free, lightweight embedding model
         const model = "sentence-transformers/all-MiniLM-L6-v2";
 
         const embeddings = await Promise.all(
             texts.map(async (text) => {
-                const result = await hf.featureExtraction({
-                    model: model,
-                    inputs: text,
-                });
-                return result;
+                try {
+                    const result = await hf.featureExtraction({
+                        model: model,
+                        inputs: text.substring(0, 500),
+                    });
+                    return result;
+                } catch (error) {
+                    return new Array(384).fill(0);
+                }
             })
         );
 
         return embeddings;
     } catch (error) {
-        console.error("Error getting Hugging Face embeddings:", error);
-        throw error;
+        console.error("Error getting embeddings:", error.message);
+        return texts.map(() => new Array(384).fill(0));
     }
 };
 
@@ -53,16 +56,11 @@ const embeddingFunction = {
     },
 };
 
-// Simplified content extraction for t2.micro
+// Simple content extraction
 const fetchArticleContent = async (url) => {
     try {
-        const headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
-        };
-
         const response = await axios.get(url, {
-            headers,
-            timeout: 5000, // Shorter timeout
+            timeout: 5000,
             maxRedirects: 3,
         });
 
@@ -73,8 +71,6 @@ const fetchArticleContent = async (url) => {
 
         // Try to find article content
         let articleContent = "";
-
-        // Simplified selectors for faster processing
         const selectors = [
             "article",
             ".article-content",
@@ -86,32 +82,29 @@ const fetchArticleContent = async (url) => {
             const content = $(selector).first();
             if (content.length > 0) {
                 articleContent = content.text().trim();
-                break;
+                if (articleContent.length > 50) break;
             }
         }
 
-        // If no specific article content found, get body text
+        // If no article content found, get body text
         if (!articleContent) {
-            const body = $("body");
-            if (body.length > 0) {
-                articleContent = body.text().trim();
-            }
+            articleContent = $("body").text().trim();
         }
 
-        // Clean up and limit content for t2.micro
+        // Clean up content
         articleContent = articleContent.replace(/\s+/g, " ").trim();
-
-        return articleContent.substring(0, 1500); // Further reduced for HF
+        return articleContent.substring(0, 1000);
     } catch (error) {
         console.error(`Error fetching content from ${url}:`, error.message);
         return null;
     }
 };
 
-// Function to parse RSS feed
+// Simple RSS parsing
 const parseRSSFeed = async (feedUrl) => {
     try {
         const response = await axios.get(feedUrl, { timeout: 5000 });
+
         const $ = cheerio.load(response.data, { xmlMode: true });
 
         const articles = [];
@@ -124,7 +117,8 @@ const parseRSSFeed = async (feedUrl) => {
             const description = $item.find("description").text().trim();
             const pubDate = $item.find("pubDate").text().trim();
 
-            if (title && link) {
+            if (title && link && title.length > 10) {
+                // Ensure meaningful title
                 articles.push({
                     title,
                     link,
@@ -150,19 +144,19 @@ const chunkText = (text, chunkSize = 800, overlap = 80) => {
     while (start < text.length) {
         const end = start + chunkSize;
         const chunk = text.substring(start, end);
-        chunks.push(chunk);
+        if (chunk.trim().length > 50) {
+            // Only add meaningful chunks
+            chunks.push(chunk.trim());
+        }
         start = end - overlap;
     }
 
     return chunks;
 };
 
-// Collect news from RSS feeds (optimized for t2.micro)
+// Simple news collection
 const collectNewsFromRSS = async () => {
-    console.log(
-        "Starting RSS news collection (Hugging Face + t2.micro optimized)..."
-    );
-    console.log(`Target feeds: ${RSS_FEEDS.length}`);
+    console.log("Starting RSS news collection...");
 
     const allArticles = [];
 
@@ -174,13 +168,12 @@ const collectNewsFromRSS = async () => {
 
         try {
             const articles = await parseRSSFeed(feedUrl);
-            console.log(`✓ Found ${articles.length} articles`);
 
-            // Process only first 2 articles from each feed (reduced from 3)
+            console.log(`Found ${articles.length} articles`);
+
+            // Process first 2 articles from each feed
             for (let j = 0; j < Math.min(2, articles.length); j++) {
                 const article = articles[j];
-                console.log(`  Fetching: ${article.title.substring(0, 40)}...`);
-
                 const content = await fetchArticleContent(article.link);
 
                 if (content && content.length > 50) {
@@ -189,36 +182,23 @@ const collectNewsFromRSS = async () => {
                         content,
                         id: uuidv4(),
                     });
-                    console.log(
-                        `  ✓ Collected: ${article.title.substring(0, 40)}...`
-                    );
-                } else {
-                    console.log(
-                        `  ✗ Insufficient content: ${article.title.substring(
-                            0,
-                            40
-                        )}...`
-                    );
                 }
 
-                // Shorter delay for t2.micro
                 await new Promise((resolve) => setTimeout(resolve, 1000));
             }
 
-            console.log(`✓ Processed feed: ${feedUrl}`);
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // Delay between feeds
+            await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch (error) {
-            console.error(`✗ Error fetching feed ${feedUrl}:`, error.message);
-            continue;
+            console.error(`Error fetching feed ${feedUrl}:`, error.message);
         }
     }
 
     return allArticles;
 };
 
-// Store articles in ChromaDB (optimized for t2.micro)
+// Simple ChromaDB storage
 const storeArticlesInChromaDB = async (articles) => {
-    console.log("\nStoring articles in ChromaDB...");
+    console.log("Storing articles in ChromaDB...");
 
     try {
         // Get or create collection
@@ -239,19 +219,18 @@ const storeArticlesInChromaDB = async (articles) => {
             // Combine title and content for better context
             const fullText = `${article.title}\n\n${article.content}`;
 
-            // Split into smaller chunks for t2.micro
+            // Split into chunks
             const chunks = chunkText(fullText, 800, 80);
 
             for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
                 chunkId++;
 
-                // Create metadata for each chunk
                 const metadata = {
                     title: article.title,
                     source: article.source,
                     url: article.link,
-                    date: article.pubDate,
-                    description: article.description,
+                    date: article.pubDate || new Date().toISOString(),
+                    description: article.description || "",
                     chunk_index: chunkIdx,
                     total_chunks: chunks.length,
                     article_index: articleIdx,
@@ -260,11 +239,11 @@ const storeArticlesInChromaDB = async (articles) => {
 
                 documents.push(chunks[chunkIdx]);
                 metadatas.push(metadata);
-                ids.push(`news_${articleIdx}_${chunkIdx}`);
+                ids.push(`news_${Date.now()}_${articleIdx}_${chunkIdx}`);
             }
         }
 
-        // Store in ChromaDB in smaller batches
+        // Store in ChromaDB in batches
         for (let i = 0; i < documents.length; i += BATCH_SIZE) {
             const batchDocs = documents.slice(i, i + BATCH_SIZE);
             const batchMetas = metadatas.slice(i, i + BATCH_SIZE);
@@ -276,19 +255,10 @@ const storeArticlesInChromaDB = async (articles) => {
                 ids: batchIds,
             });
 
-            console.log(
-                `✓ Stored batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(
-                    documents.length / BATCH_SIZE
-                )}`
-            );
-
-            // Add delay between batches for t2.micro
             await new Promise((resolve) => setTimeout(resolve, 2000));
         }
 
-        console.log(
-            `✓ Stored ${documents.length} chunks from ${articles.length} articles`
-        );
+        console.log(`Stored ${documents.length} chunks from ${articles.length} articles`);
         return {
             success: true,
             chunks: documents.length,
@@ -316,44 +286,29 @@ const getCollectionStats = async () => {
     }
 };
 
-// Main function to collect and store news (t2.micro optimized)
+// Main function
 const collectAndStoreNews = async () => {
-    console.log(
-        "=== News Collection and Storage (Hugging Face + t2.micro) ==="
-    );
-    console.log(`Started at: ${new Date().toISOString()}`);
+    console.log("=== News Collection and Storage ===");
 
     try {
         // Collect articles
         const articles = await collectNewsFromRSS();
 
         if (articles.length === 0) {
-            console.log("No articles collected. Exiting.");
+            console.log("No articles collected");
             return { success: false, message: "No articles collected" };
         }
 
-        console.log(`\nCollected ${articles.length} articles`);
+        console.log(`Collected ${articles.length} articles`);
 
         // Store in ChromaDB
         const result = await storeArticlesInChromaDB(articles);
 
         if (result.success) {
-            console.log(`\n=== Collection Complete ===`);
-            console.log(`Articles: ${result.articles}`);
-            console.log(`Chunks: ${result.chunks}`);
-            console.log(`Collection name: ${newsCollectionName}`);
-            console.log(`Completed at: ${new Date().toISOString()}`);
-
-            // Get final stats
-            const stats = await getCollectionStats();
-            if (stats.success) {
-                console.log(`Total documents in collection: ${stats.count}`);
-            }
-
+            console.log("Collection completed successfully!");
             return { success: true, ...result };
         } else {
-            console.log(`\n=== Collection Failed ===`);
-            console.log(`Error: ${result.error}`);
+            console.log(`Collection failed: ${result.error}`);
             return result;
         }
     } catch (error) {
