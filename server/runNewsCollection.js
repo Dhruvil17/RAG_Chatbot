@@ -1,13 +1,10 @@
 /**
  * Script to collect and store news articles in ChromaDB (Hugging Face + t2.micro optimized)
- * Usage: node runNewsCollectionHF.js
+ * Usage: node runNewsCollection.js
  */
 
 require("dotenv").config();
-const {
-    collectAndStoreNews,
-    getCollectionStats,
-} = require("./newsCollectorHF");
+const { collectAndStoreNews, getCollectionStats } = require("./newsCollector");
 
 async function main() {
     console.log(
