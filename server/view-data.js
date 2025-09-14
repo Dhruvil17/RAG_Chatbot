@@ -18,10 +18,38 @@ async function viewChromaDBData() {
         console.log(collections);
         console.log(`Total collections: ${collections.length}\n`);
 
-        // Get news collection
+        // Get news collection with embedding function
         console.log("📰 News Collection Details:");
+
+        const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+
+        const embeddingFunction = {
+            generate: async (texts) => {
+                try {
+                    const model = "sentence-transformers/all-MiniLM-L6-v2";
+                    const embeddings = await Promise.all(
+                        texts.map(async (text) => {
+                            try {
+                                const result = await hf.featureExtraction({
+                                    model: model,
+                                    inputs: text.substring(0, 500),
+                                });
+                                return result;
+                            } catch (error) {
+                                return new Array(384).fill(0);
+                            }
+                        })
+                    );
+                    return embeddings;
+                } catch (error) {
+                    return texts.map(() => new Array(384).fill(0));
+                }
+            },
+        };
+
         const collection = await chroma.getCollection({
             name: newsCollectionName,
+            embeddingFunction: embeddingFunction,
         });
 
         // Get collection count
@@ -39,11 +67,16 @@ async function viewChromaDBData() {
             console.log(`ID: ${results.ids[index]}`);
         });
 
-        // Query the collection using text search (simpler approach)
+        // Query the collection using embedding function
         console.log("\n🔍 Querying for 'technology' news:");
         try {
+            // Generate embedding for the query
+            const queryEmbedding = await embeddingFunction.generate([
+                "technology news",
+            ]);
+
             const queryResults = await collection.query({
-                queryTexts: ["technology news"],
+                queryEmbeddings: queryEmbedding,
                 nResults: 2,
             });
 

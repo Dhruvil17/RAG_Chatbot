@@ -25,52 +25,6 @@ const RSS_FEEDS = [
     "https://feeds.npr.org/1001/rss.xml",
 ];
 
-// async function resolveCoreference(currentQuestion, conversationHistory) {
-//     try {
-//         // Extract all previous messages to build context
-//         const previousQuestions = conversationHistory.filter((msg) => msg.role === "user").map((msg) => msg.content);
-
-//         // Simply join all previous questions for context
-//         const conversationFlow = previousQuestions.join("\n");
-
-//         const prompt = `
-//         Given this conversation flow:
-//         ${conversationFlow}
-
-//         Current question: "${currentQuestion}"
-
-//         Task: Analyze the current question and resolve any pronouns or unclear references based on the conversation context. Return the fully resolved version of the current question with all specific details.
-
-//         Rules:
-//         1. Resolve pronouns (it, they, this, etc.) based on the most recently discussed items
-//         2. Keep the question natural and grammatically correct
-//         3. Only return the resolved question
-//         4. If no resolution is needed, return the original question unchanged`;
-
-//         const completion = await openai.chat.completions.create({
-//             model: "gpt-4",
-//             messages: [
-//                 {
-//                     role: "system",
-//                     content: "You are a context-aware reference resolution system. Your task is to maintain conversation context and resolve unclear references while keeping the language natural.",
-//                 },
-//                 {
-//                     role: "user",
-//                     content: prompt,
-//                 },
-//             ],
-//             temperature: 0.1,
-//         });
-
-//         const resolvedQuestion = completion.choices[0].message.content.trim();
-
-//         return resolvedQuestion;
-//     } catch (error) {
-//         console.error("Error in context-aware resolution:", error);
-//         return currentQuestion;
-//     }
-// }
-
 // Function to get embeddings from Hugging Face
 const getHFEmbeddings = async (texts) => {
     try {
