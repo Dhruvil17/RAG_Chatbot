@@ -2,7 +2,14 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const { collectNewsData, queryNewsContent } = require("./model");
+const {
+    collectNewsData,
+    queryNewsContent,
+    createSession,
+    getSessionHistory,
+    clearSession,
+    validateSession,
+} = require("./model");
 
 const app = express();
 const PORT = process.env.PORT;
@@ -45,11 +52,67 @@ app.post("/api/send-message", async (req, res) => {
     try {
         const { question } = req.body;
         const sessionID = req.headers["session-id"];
-        const answer = await queryNewsContent(question);
+
+        const result = await queryNewsContent(question, sessionID);
+
         res.json({
             success: true,
-            reply: answer,
-            sessionID: sessionID || "new-session",
+            reply: result.answer,
+            sessionID: result.sessionId,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Session Management Endpoints
+app.post("/api/session/create", async (req, res) => {
+    try {
+        const sessionId = await createSession();
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            message: "Session created successfully",
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get("/api/session/:sessionId/history", async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const history = await getSessionHistory(sessionId);
+
+        res.json({
+            success: true,
+            ...history,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete("/api/session/:sessionId", async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const result = await clearSession(sessionId);
+
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get("/api/session/:sessionId/validate", async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const isValid = await validateSession(sessionId);
+
+        res.json({
+            success: true,
+            valid: isValid,
+            sessionId: sessionId,
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

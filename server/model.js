@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cheerio = require("cheerio");
 const { ChromaClient } = require("chromadb");
 const { v4: uuidv4 } = require("uuid");
+const Redis = require("ioredis");
 
 // Initialize Hugging Face
 const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
@@ -18,8 +19,139 @@ const chroma = new ChromaClient({
     path: "http://localhost:8000",
 });
 
+// Initialize Redis for session management
+const redis = new Redis({
+    host: process.env.REDIS_HOST || "localhost",
+    port: process.env.REDIS_PORT || 6379,
+    password: process.env.REDIS_PASSWORD || undefined,
+    retryDelayOnFailover: 100,
+    maxRetriesPerRequest: 3,
+});
+
+// Redis event handlers
+redis.on("connect", () => {
+    console.log("Redis connected successfully");
+});
+
+redis.on("error", (err) => {
+    console.error("Redis connection error:", err);
+});
+
 const BATCH_SIZE = 10; // Smaller batch for news articles
 const newsCollectionName = "news_corpus";
+
+// Session configuration
+const SESSION_TTL = 24 * 60 * 60; // 24 hours in seconds
+const SESSION_PREFIX = "chat_session:";
+
+// Session Management Functions
+async function createSession() {
+    const sessionId = uuidv4();
+    const sessionData = {
+        id: sessionId,
+        createdAt: new Date().toISOString(),
+        lastActivity: new Date().toISOString(),
+        messages: [],
+    };
+
+    await redis.setex(
+        `${SESSION_PREFIX}${sessionId}`,
+        SESSION_TTL,
+        JSON.stringify(sessionData)
+    );
+
+    console.log(`Created new session: ${sessionId}`);
+    return sessionId;
+}
+
+async function getSession(sessionId) {
+    try {
+        const sessionData = await redis.get(`${SESSION_PREFIX}${sessionId}`);
+        if (!sessionData) {
+            return null;
+        }
+
+        const session = JSON.parse(sessionData);
+        // Update last activity
+        session.lastActivity = new Date().toISOString();
+        await redis.setex(
+            `${SESSION_PREFIX}${sessionId}`,
+            SESSION_TTL,
+            JSON.stringify(session)
+        );
+
+        return session;
+    } catch (error) {
+        console.error("Error getting session:", error);
+        return null;
+    }
+}
+
+async function addMessageToSession(sessionId, message) {
+    try {
+        const session = await getSession(sessionId);
+        if (!session) {
+            throw new Error("Session not found");
+        }
+
+        session.messages.push({
+            ...message,
+            timestamp: new Date().toISOString(),
+        });
+
+        await redis.setex(
+            `${SESSION_PREFIX}${sessionId}`,
+            SESSION_TTL,
+            JSON.stringify(session)
+        );
+
+        console.log(`Added message to session ${sessionId}`);
+        return session;
+    } catch (error) {
+        console.error("Error adding message to session:", error);
+        throw error;
+    }
+}
+
+async function getSessionHistory(sessionId) {
+    try {
+        const session = await getSession(sessionId);
+        if (!session) {
+            return { messages: [], sessionId: null };
+        }
+
+        return {
+            messages: session.messages,
+            sessionId: session.id,
+            createdAt: session.createdAt,
+            lastActivity: session.lastActivity,
+        };
+    } catch (error) {
+        console.error("Error getting session history:", error);
+        return { messages: [], sessionId: null };
+    }
+}
+
+async function clearSession(sessionId) {
+    try {
+        await redis.del(`${SESSION_PREFIX}${sessionId}`);
+        console.log(`Cleared session: ${sessionId}`);
+        return { success: true, message: "Session cleared successfully" };
+    } catch (error) {
+        console.error("Error clearing session:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function validateSession(sessionId) {
+    try {
+        const session = await getSession(sessionId);
+        return session !== null;
+    } catch (error) {
+        console.error("Error validating session:", error);
+        return false;
+    }
+}
 
 // Function to generate response using Gemini AI
 async function generateResponseWithGemini(question, context) {
@@ -490,12 +622,44 @@ async function storeNewsContent() {
     }
 }
 
-// Function to query news content
-exports.queryNewsContent = async (question) => {
+// Function to query news content with session management
+exports.queryNewsContent = async (question, sessionId = null) => {
     console.log("Starting news query at " + new Date().toLocaleString());
-    const answer = await askQuestionAboutNews(question);
-    console.log("Completed news query at " + new Date().toLocaleString());
-    return answer;
+
+    try {
+        // Validate or create session
+        let currentSessionId = sessionId;
+        if (!currentSessionId || !(await validateSession(currentSessionId))) {
+            currentSessionId = await createSession();
+        }
+
+        // Add user question to session
+        await addMessageToSession(currentSessionId, {
+            type: "user",
+            content: question,
+        });
+
+        // Get news answer
+        const answer = await askQuestionAboutNews(question);
+
+        // Add bot response to session
+        await addMessageToSession(currentSessionId, {
+            type: "assistant",
+            content: answer,
+        });
+
+        console.log("Completed news query at " + new Date().toLocaleString());
+        return {
+            answer: answer,
+            sessionId: currentSessionId,
+        };
+    } catch (error) {
+        console.error("Error in queryNewsContent:", error);
+        return {
+            answer: "Sorry, I couldn't process your question at the moment.",
+            sessionId: sessionId,
+        };
+    }
 };
 
 // Function to collect news data
@@ -505,3 +669,9 @@ exports.collectNewsData = async () => {
     console.log("Completed news collection at " + new Date().toLocaleString());
     return result;
 };
+
+// Session Management Exports
+exports.createSession = createSession;
+exports.getSessionHistory = getSessionHistory;
+exports.clearSession = clearSession;
+exports.validateSession = validateSession;
