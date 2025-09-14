@@ -16,6 +16,24 @@ const chroma = new ChromaClient({
 const BATCH_SIZE = 10; // Smaller batch for news articles
 const newsCollectionName = "news_corpus";
 
+// Function to clean text content
+function cleanText(text) {
+    if (!text) return "";
+
+    return text
+        .replace(/<[^>]*>/g, "")
+        .replace(/&[^;]+;/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/[^\w\s.,!?;:'"()-]/g, "")
+        .replace(
+            /To play this video you need to enable JavaScript in your browser\./g,
+            ""
+        )
+        .replace(/This video can not be played/g, "")
+        .replace(/Media caption/g, "")
+        .trim();
+}
+
 // RSS feeds for news collection
 const RSS_FEEDS = [
     "https://feeds.bbci.co.uk/news/rss.xml",
@@ -69,9 +87,12 @@ async function storeConversationHistory(question, answer) {
     const collection = await getConversationCollection();
     const documentId = `conversation_${new Date().toISOString()}`;
 
+    const cleanQuestion = cleanText(question);
+    const cleanAnswer = cleanText(answer);
+
     await collection.add({
         ids: [documentId],
-        documents: [`Question: ${question} Answer: ${answer}`],
+        documents: [`Question: ${cleanQuestion} Answer: ${cleanAnswer}`],
         metadatas: [{ timestamp: new Date().toISOString() }],
     });
 
@@ -118,7 +139,10 @@ async function fetchArticleContent(url) {
         });
 
         const $ = cheerio.load(response.data);
-        $("script, style").remove();
+
+        $(
+            "script, style, noscript, .advertisement, .ad, .ads, .social-share, .comments, .error-message"
+        ).remove();
 
         let articleContent = "";
         const selectors = [
@@ -126,6 +150,9 @@ async function fetchArticleContent(url) {
             ".article-content",
             ".story-body",
             "main",
+            ".content",
+            ".post-content",
+            ".entry-content",
         ];
 
         for (const selector of selectors) {
@@ -140,7 +167,9 @@ async function fetchArticleContent(url) {
             articleContent = $("body").text().trim();
         }
 
-        articleContent = articleContent.replace(/\s+/g, " ").trim();
+        // Clean the text using the cleanText function
+        articleContent = cleanText(articleContent);
+
         return articleContent.substring(0, 1000);
     } catch (error) {
         console.error(`Error fetching content from ${url}:`, error.message);
@@ -157,9 +186,9 @@ async function parseRSSFeed(feedUrl) {
         const articles = [];
         $("item").each((i, item) => {
             const $item = $(item);
-            const title = $item.find("title").text().trim();
+            const title = cleanText($item.find("title").text());
             const link = $item.find("link").text().trim();
-            const description = $item.find("description").text().trim();
+            const description = cleanText($item.find("description").text());
             const pubDate = $item.find("pubDate").text().trim();
 
             if (title && link && title.length > 10) {
@@ -255,7 +284,14 @@ async function storeNewsInChromaDB(collection, articles) {
 
         for (let articleIdx = 0; articleIdx < articles.length; articleIdx++) {
             const article = articles[articleIdx];
-            const fullText = `${article.title}\n\n${article.content}`;
+
+            // Clean the content before storing
+            const cleanTitle = cleanText(article.title);
+            const cleanContent = cleanText(article.content);
+            const cleanDescription = cleanText(article.description || "");
+
+            // Create clean full text for storage
+            const fullText = `${cleanTitle}\n\n${cleanDescription}\n\n${cleanContent}`;
 
             // Split into chunks
             const chunks = splitIntoChunks(fullText, 800, 80);
@@ -264,11 +300,11 @@ async function storeNewsInChromaDB(collection, articles) {
                 chunkId++;
 
                 const metadata = {
-                    title: article.title,
+                    title: cleanTitle,
                     source: article.source,
                     url: article.link,
                     date: article.pubDate || new Date().toISOString(),
-                    description: article.description || "",
+                    description: cleanDescription,
                     chunk_index: chunkIdx,
                     total_chunks: chunks.length,
                     article_id: article.id,
