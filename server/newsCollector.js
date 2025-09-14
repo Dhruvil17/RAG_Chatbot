@@ -258,7 +258,9 @@ const storeArticlesInChromaDB = async (articles) => {
             await new Promise((resolve) => setTimeout(resolve, 2000));
         }
 
-        console.log(`Stored ${documents.length} chunks from ${articles.length} articles`);
+        console.log(
+            `Stored ${documents.length} chunks from ${articles.length} articles`
+        );
         return {
             success: true,
             chunks: documents.length,
