@@ -265,10 +265,11 @@ async function collectAndStoreNews(collection) {
 
     // Store articles in ChromaDB
     if (allArticles.length > 0) {
-        await storeNewsInChromaDB(collection, allArticles);
+        const result = await storeNewsInChromaDB(collection, allArticles);
+        return result;
     }
 
-    return allArticles;
+    return { success: false, error: "No articles collected" };
 }
 
 // Function to split text into chunks
@@ -401,7 +402,12 @@ async function storeNewsContent() {
             console.log(
                 "News data already exists in the collection. Skipping collection."
             );
-            return { success: true, message: "Data already exists" };
+            return {
+                success: true,
+                message: "Data already exists",
+                articles: 0,
+                chunks: collectionInfo,
+            };
         }
 
         // Proceed to collect and store news articles
