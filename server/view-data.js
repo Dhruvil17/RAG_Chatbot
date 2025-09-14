@@ -1,5 +1,6 @@
 require("dotenv").config();
 const { ChromaClient } = require("chromadb");
+const { HfInference } = require("@huggingface/inference");
 
 const chroma = new ChromaClient({
     path: "http://localhost:8000",
@@ -29,7 +30,7 @@ async function viewChromaDBData() {
 
         // Get sample documents
         console.log("📄 Sample Documents (first 3):");
-        const results = await collection.get({ limit: 3 });
+        const results = await collection.get();
 
         results.documents.forEach((doc, index) => {
             console.log(`\n--- Document ${index + 1} ---`);
@@ -40,10 +41,7 @@ async function viewChromaDBData() {
 
         // Query the collection
         console.log("\n🔍 Querying for 'technology' news:");
-        const { HfInference } = require("@huggingface/inference");
-        const hf = new HfInference(
-            process.env.HUGGINGFACE_API_KEY || "hf_dummy_key"
-        );
+        const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
 
         // Generate embedding for query
         const queryEmbedding = await hf.featureExtraction({
