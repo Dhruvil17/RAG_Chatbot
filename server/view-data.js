@@ -40,8 +40,19 @@ async function viewChromaDBData() {
 
         // Query the collection
         console.log("\n🔍 Querying for 'technology' news:");
+        const { HfInference } = require("@huggingface/inference");
+        const hf = new HfInference(
+            process.env.HUGGINGFACE_API_KEY || "hf_dummy_key"
+        );
+
+        // Generate embedding for query
+        const queryEmbedding = await hf.featureExtraction({
+            model: "sentence-transformers/all-MiniLM-L6-v2",
+            inputs: "technology news",
+        });
+
         const queryResults = await collection.query({
-            queryTexts: ["technology news"],
+            queryEmbeddings: [queryEmbedding],
             nResults: 2,
         });
 
