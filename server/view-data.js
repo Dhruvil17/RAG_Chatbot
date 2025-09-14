@@ -39,27 +39,28 @@ async function viewChromaDBData() {
             console.log(`ID: ${results.ids[index]}`);
         });
 
-        // Query the collection
+        // Query the collection using text search (simpler approach)
         console.log("\n🔍 Querying for 'technology' news:");
-        const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
+        try {
+            const queryResults = await collection.query({
+                queryTexts: ["technology news"],
+                nResults: 2,
+            });
 
-        // Generate embedding for query
-        const queryEmbedding = await hf.featureExtraction({
-            model: "sentence-transformers/all-MiniLM-L6-v2",
-            inputs: "technology news",
-        });
-
-        const queryResults = await collection.query({
-            queryEmbeddings: [queryEmbedding],
-            nResults: 2,
-        });
-
-        console.log(`Found ${queryResults.documents[0].length} results:`);
-        queryResults.documents[0].forEach((doc, index) => {
-            console.log(`\n--- Query Result ${index + 1} ---`);
-            console.log(`Content: ${doc.substring(0, 150)}...`);
-            console.log(`Distance: ${queryResults.distances[0][index]}`);
-        });
+            console.log(`Found ${queryResults.documents[0].length} results:`);
+            queryResults.documents[0].forEach((doc, index) => {
+                console.log(`\n--- Query Result ${index + 1} ---`);
+                console.log(`Content: ${doc.substring(0, 150)}...`);
+                if (queryResults.distances && queryResults.distances[0]) {
+                    console.log(
+                        `Distance: ${queryResults.distances[0][index]}`
+                    );
+                }
+            });
+        } catch (queryError) {
+            console.log("⚠️ Query failed, but data viewing was successful!");
+            console.log("Query error:", queryError.message);
+        }
     } catch (error) {
         console.error("❌ Error viewing data:", error.message);
     }
