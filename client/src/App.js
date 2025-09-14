@@ -14,7 +14,7 @@ function App() {
         setMessages((prev) => [...prev, userMessage]);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/send-message`, {
+            const response = await fetch(`${API_BASE_URL}/send-message`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
