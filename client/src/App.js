@@ -29,7 +29,6 @@ function App() {
                 setSessionID(data.sessionID);
             }
 
-            // Add server response to chat
             const serverMessage = { type: "server", content: data.reply };
             setMessages((prev) => [...prev, serverMessage]);
         } catch (error) {
