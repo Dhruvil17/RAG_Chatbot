@@ -3,7 +3,7 @@ import ChatBox from "./components/ChatBox";
 import InputArea from "./components/InputArea";
 import "./App.css";
 
-const API_BASE_URL = process.env.REACT_APP_BASE_URL;
+const API_BASE_URL = "/api";
 
 function App() {
     const [messages, setMessages] = useState([]);
