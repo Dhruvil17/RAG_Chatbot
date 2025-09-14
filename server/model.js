@@ -21,16 +21,17 @@ function cleanText(text) {
     if (!text) return "";
 
     return text
-        .replace(/<[^>]*>/g, "")
-        .replace(/&[^;]+;/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/[^\w\s.,!?;:'"()-]/g, "")
+        .replace(/<[^>]*>/g, "") // Remove HTML tags
+        .replace(/&[^;]+;/g, " ") // Remove HTML entities
+        .replace(/\s+/g, " ") // Replace multiple spaces with single space
+        .replace(/[^\w\s.,!?;:'"()-]/g, "") // Remove special characters except basic punctuation
         .replace(
             /To play this video you need to enable JavaScript in your browser\./g,
             ""
         )
         .replace(/This video can not be played/g, "")
         .replace(/Media caption/g, "")
+        .replace(/\s+/g, " ") // Clean up extra spaces again
         .trim();
 }
 
@@ -280,11 +281,29 @@ function splitIntoChunks(text, chunkSize, overlap = 100) {
 
     while (start < text.length) {
         const end = start + chunkSize;
-        const chunk = text.substring(start, end);
+        let chunk = text.substring(start, end);
+
+        // Try to end at a sentence boundary
+        if (end < text.length) {
+            const lastSentenceEnd = chunk.lastIndexOf(".");
+            const lastQuestionEnd = chunk.lastIndexOf("?");
+            const lastExclamationEnd = chunk.lastIndexOf("!");
+            const lastEnd = Math.max(
+                lastSentenceEnd,
+                lastQuestionEnd,
+                lastExclamationEnd
+            );
+
+            if (lastEnd > start + chunkSize * 0.5) {
+                // Only if we don't lose too much content
+                chunk = text.substring(start, start + lastEnd + 1);
+            }
+        }
+
         if (chunk.trim().length > 50) {
             chunks.push(chunk.trim());
         }
-        start = end - overlap;
+        start = start + chunk.length - overlap;
     }
 
     return chunks;
@@ -397,12 +416,11 @@ async function askQuestionAboutNews(question) {
         const cleanContext = cleanText(rawContext);
         console.log("Context:", cleanContext);
 
-        // For now, return a simple response based on the context
-        // You can integrate with Gemini API here later
+        // Format the response better
         const answer = `Based on the latest news, here's what I found:\n\n${cleanContext.substring(
             0,
-            500
-        )}...`;
+            1000
+        )}${cleanContext.length > 1000 ? "..." : ""}`;
 
         console.log("Question:", question);
         console.log("Answer:", answer);
