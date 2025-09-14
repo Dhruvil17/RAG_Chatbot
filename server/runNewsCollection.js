@@ -1,25 +1,19 @@
-#!/usr/bin/env node
-
 /**
- * Script to collect and store news articles in ChromaDB
- * Usage: node runNewsCollection.js
+ * Script to collect and store news articles in ChromaDB (Hugging Face + t2.micro optimized)
+ * Usage: node runNewsCollectionHF.js
  */
 
 require("dotenv").config();
-const { collectAndStoreNews, getCollectionStats } = require("./newsCollector");
+const {
+    collectAndStoreNews,
+    getCollectionStats,
+} = require("./newsCollectorHF");
 
 async function main() {
-    console.log("🚀 Starting News Collection Process...");
+    console.log(
+        "🚀 Starting News Collection Process (Hugging Face + t2.micro optimized)..."
+    );
     console.log("=".repeat(50));
-
-    // Check if GEMINI_API_KEY is set
-    if (!process.env.GEMINI_API_KEY) {
-        console.error(
-            "❌ Error: GEMINI_API_KEY not found in environment variables"
-        );
-        console.log("Please set your Gemini API key in the .env file");
-        process.exit(1);
-    }
 
     // Check if ChromaDB is running
     try {
@@ -30,7 +24,9 @@ async function main() {
     } catch (error) {
         console.error("❌ Error: Cannot connect to ChromaDB");
         console.log("Please make sure ChromaDB is running:");
-        console.log("  cd server && docker-compose up -d");
+        console.log(
+            "  cd server && docker-compose -f docker-compose-micro.yml up -d"
+        );
         process.exit(1);
     }
 
